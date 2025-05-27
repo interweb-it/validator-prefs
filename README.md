@@ -25,6 +25,7 @@ Options:
   -h, --help                 Display help for command
 ```
 
+NOTE: you need to enter the seed phrase of the controller account when prompted.
 
 ## Example
 ```bash
