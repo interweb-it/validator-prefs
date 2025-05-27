@@ -1,0 +1,13 @@
+{
+  "name": "validator-prefs",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "type": "module",
+  "description": "A CLI tool to manage validator preferences on a Polkadot network.",
+  "dependencies": {
+    "@polkadot/api": "^16.0.1",
+    "commander": "^14.0.0",
+    "readline": "^1.3.0"
+  }
+}

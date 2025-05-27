@@ -1,0 +1,120 @@
+#!/usr/bin/env node
+
+import { WsProvider, ApiPromise } from '@polkadot/api'
+import { Keyring } from '@polkadot/keyring'
+import { program } from 'commander'
+import readline from 'readline';
+
+function askSecret(query) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    // Hide input
+    const stdin = process.openStdin();
+    process.stdin.on('data', (char) => {
+      char = char + '';
+      switch (char) {
+        case '\n':
+        case '\r':
+        case '\u0004':
+          process.stdout.write('\n');
+          break;
+        default:
+          process.stdout.clearLine(0);
+          process.stdout.cursorTo(0);
+          process.stdout.write(query + '*'.repeat(rl.line.length));
+          break;
+      }
+    });
+
+    rl.question(query, (value) => {
+      rl.history = rl.history.slice(1);
+      rl.close();
+      resolve(value);
+    });
+  });
+}
+
+// // Example usage
+// (async () => {
+//   const secret = await askHiddenQuestion('Enter password or seed: ');
+//   console.log('\nSecret captured (hidden).');
+// })();
+
+const wsEndpoint = 'wss://rpc.metaspan.io/'; // Default Kusama endpoint
+
+program
+  .name('set-prefs')
+  .description('Set validator preferences')
+  .version('1.0.0')
+  .helpOption('-h, --help', 'Display help for command')
+  .requiredOption('-c, --chain <chain>', 'Blockchain network to connect to', 'kusama')
+  // .addArgument(new commander.Argument('<drink-size>', 'drink cup size').choices(['small', 'medium', 'large']))
+  .requiredOption('-a, --address <address>', 'Validator address')
+  .requiredOption('-m, --commission <number>', 'Commission percentage', parseFloat, 1.5);
+
+program.parse();
+
+const options = program.opts();
+// console.log('Options:', options);
+// process.exit(0);
+
+const { chain, address, commission } = options;
+
+// validate the inputs
+if (isNaN(commission) || commission < 0 || commission > 100) {
+  console.error('Commission must be a number between 0 and 100');
+  process.exit(1);
+} else {
+  console.log(`Connecting to ${chain} with address ${address} and commission ${commission}`);
+}
+
+const secret = await askSecret('Enter seed: ');
+console.log('\nSecret captured (hidden).');
+// console.log(secret)
+
+;(async () => {
+  const provider = new WsProvider(wsEndpoint+chain);
+  const api = await ApiPromise.create({ provider, noInitWarn: true });
+
+  const keyring = new Keyring({ type: 'sr25519', ss58Format: api.registry.chainSS58 });
+  const account = keyring.addFromUri(secret.trim());
+
+  console.log(`Loaded account: ${account.address}`);
+
+  // commission is percentage; we convert to perbill (1_000_000_000 scale)
+  const commissionPerbill = Math.round((commission / 100) * 1_000_000_000);
+
+  const prefs = {
+    commission: commissionPerbill,
+    blocked: false
+  };
+
+  console.log(`Sending transaction to set commission to ${commission}%...`);
+
+  const unsub = await api.tx.staking
+    .validate(prefs)
+    .signAndSend(account, ({ status, dispatchError }) => {
+      if (dispatchError) {
+        if (dispatchError.isModule) {
+          const decoded = api.registry.findMetaError(dispatchError.asModule);
+          const { documentation, method, section } = decoded;
+          console.error(`❌ Transaction failed: ${section}.${method} - ${documentation.join(' ')}`);
+        } else {
+          console.error(`❌ Transaction failed: ${dispatchError.toString()}`);
+        }
+        unsub();
+        process.exit(1);
+      } else if (status.isInBlock) {
+        console.log(`✅ Included in block: ${status.asInBlock.toHex()}`);
+      } else if (status.isFinalized) {
+        console.log(`🎉 Finalized in block: ${status.asFinalized.toHex()}`);
+        unsub();
+        process.exit(0);
+      }
+    });
+
+})();
