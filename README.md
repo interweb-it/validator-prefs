@@ -1,7 +1,15 @@
 # Set validator preferences
 
+## Setup
 
-# Usage
+```bash
+git clone https://github.com/interweb-it/validator-prefs
+cd validator-prefs
+yarn install 
+chmod +x set-prefs
+```
+
+## Usage
 
 ```bash
 ./set-prefs -h                    
